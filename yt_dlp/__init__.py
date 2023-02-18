@@ -961,6 +961,7 @@ def _real_main(argv=None):
 
 
 def main(argv=None):
+    print('USING MY EDITED LOCAL YT-DLP')
     global _IN_CLI
     _IN_CLI = True
     try:

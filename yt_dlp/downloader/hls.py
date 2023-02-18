@@ -179,7 +179,11 @@ class HlsFD(FragmentFD):
                     frag_index += 1
                     if frag_index <= ctx['fragment_index']:
                         continue
-                    frag_url = urljoin(man_url, line)
+                    try:
+                        frag_url = info_dict['fragments'][frag_index]['url']
+                    except (IndexError, KeyError):
+                        frag_url = urljoin(man_url, line)
+
                     if extra_query:
                         frag_url = update_url_query(frag_url, extra_query)
 

@@ -1519,6 +1519,7 @@ class YoutubeDL:
                 except ExtractorError as e:  # An error we somewhat expected
                     self.report_error(str(e), e.format_traceback())
                 except Exception as e:
+                    raise
                     if self.params.get('ignoreerrors'):
                         self.report_error(str(e), tb=encode_compat_str(traceback.format_exc()))
                     else:

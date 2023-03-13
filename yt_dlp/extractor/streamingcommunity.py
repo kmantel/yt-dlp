@@ -35,20 +35,25 @@ class StreamingCommunityIE(InfoExtractor):
         # title = self._html_search_regex(r'<h1>(.+?)</h1>', webpage, 'title')
 
         match = re.match(r'.*type=(\w+)&rendition=(.*?)&.*', url)
-        typ, resolution = match[1], match[2]
+        typ, rendition = match[1], match[2]
         cdn = data['cdn']
         fragments = []
         next_cdn_proxy_index = data['proxy_index']
         num_cdn_proxies = len(cdn['proxies'])
 
         for f in webpage.split('\n'):
-            if f[0] == '#':
+            if len(f) == 0 or f[0] == '#':
                 continue
 
             proxy_num = cdn['proxies'][next_cdn_proxy_index % num_cdn_proxies]['number']
             next_cdn_proxy_index += 1
 
-            frag_url = f'https://sc-{cdn["type"]}{cdn["number"]}-{proxy_num:02d}.{data["host"]}/hls/{data["storage"]["number"]}/{data["folder_id"]}/{typ}/{resolution}/{f}'
+            if '.m3u8' in rendition:
+                resolution_str = ''
+            else:
+                resolution_str = f'/{typ}/{rendition}'
+
+            frag_url = f'https://sc-{cdn["type"]}{cdn["number"]}-{proxy_num:02d}.{data["host"]}/hls/{data["storage"]["number"]}/{data["folder_id"]}{resolution_str}/{f}'
 
             fragments.append({
                 'url': frag_url,

@@ -8,12 +8,12 @@ class StreamingCommunityIE(InfoExtractor):
     _VALID_URL = r'https?://(?:www\.)?scws\.work/master/(?P<id>[0-9]+).*'
 
     _TESTS = [{
-        'url': 'https://streamingcommunity.blue/watch/5471',
+        'url': 'https://streamingcommunity.blue/watch/',
         'md5': 'TODO: md5 sum of the first 10241 bytes of the video file (use --test)',
         'info_dict': {
-            'id': '5471',
+            'id': '',
             'ext': 'mp4',
-            'title': 'Adventure Time S1:E1 Ep. 01-02 | La morte dei morti dolce',
+            'title': '',
             'thumbnail': r're:^https?://.*\.jpg$',
             # TODO more properties, either as:
             # * A value
@@ -23,8 +23,20 @@ class StreamingCommunityIE(InfoExtractor):
         }
     }]
 
+    def __init__(self, *args, **kwargs):
+        self._video_id = None
+        super().__init__(*args, **kwargs)
+
+    # _VIDEO_ID = None
+
+    # def _get_video_id(url):
+    #     if self._VIDEO_ID is not None:
+    #         return self.VIDEO_ID
+    #     else:
+    #         return self._match_id(url)
+
     def _real_extract(self, url):
-        video_id = self._match_id(url)
+        video_id = self._video_id if self._video_id is not None else self._match_id(url)
         webpage = self._download_webpage(url, video_id)
         work_url = f'https://scws.work/videos/{video_id}'
         data = json.loads(
@@ -84,3 +96,48 @@ class StreamingCommunityIE(InfoExtractor):
             ],
             # TODO more properties (see yt_dlp/extractor/common.py)
         }
+
+
+class StreamingCommunityListIE(StreamingCommunityIE):
+    _VALID_URL = r'https?://(?:www\.)?streamingcommunity.(blue|bike)/watch/([0-9]+)\?e=(?P<id>[0-9]+)'
+    _USER_AGENT = 'Mozilla/5.0 (X11; Linux i686; rv:47.0) Gecko/20100101 Firefox/47.0'
+    _HEADERS = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en-US,en;q=0.5",
+        # "Cookie": "cf_clearance=wAeukLs0I6YCuM7t3np18NG9zhOCcU99ipj0a7wUiR8-1676807849-0-250; XSRF-TOKEN=eyJpdiI6IkRUbGVHRzZlTkZYbVpRNVFQcW4rY1E9PSIsInZhbHVlIjoiYWxSY2dPK3p2aFNBYW8xRWg5SWltV3kzdUlINkNpVzBYcFExZGp4RFpZU0VNblU3am5NYUNyTnVQcGlLOWgySGJSYldNalRsWXFqRkRKK2RBdXBoMkJBMWo1dUt1bkhpajNnY1lrQ0VzeThDRk05dTdHeEdXWmxOeWJObk15cnUiLCJtYWMiOiI1NDA3ZDhiMzlhMjJiOGUzNThlOWI2OTlmYjNiM2Q4MTE1NjM1ODVhYjcyNjdlNjI3Mzg1N2QyMGYzZDM1ZDQ2In0%3D; streamingcommunity_session=eyJpdiI6IlBLMVpNTW40dCtZRW1MVkptbzczMUE9PSIsInZhbHVlIjoiaWxHUExUeFhRaW96NE9yMmMya21iVFNXVmZXMDJMS0dWUjlLdDJJQ3JzTHlsMXVcL2FtTFN6ZmhFUWdKWTR0QXhxVVVWbE0zbVB0d0dveFRDNW53cnVPYlpYcVNRemdKZ05cL00wSkV1K3FvQkNoN3VXMGdDQkZjOEJvVEw0bW54MSIsIm1hYyI6IjA3ZGQ0ZTk0OWJjOTk1OTdiYzE0N2YzZDUwZTE2Y2NhOWRkM2JhYzU4M2ViYTk3NzliNGM1MzY5ZTYzNGYyMWEifQ%3D%3D; cf_chl_2=c2bf5c24b0c95aa; cf_chl_rc_m=3",
+        "Connection": "keep-alive",
+        "DNT": "1",
+        "Host": "streamingcommunity.blue",
+        "Referer": "https://streamingcommunity.blue/",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Sec-GPC": "1",
+        "TE": "trailers",
+        "Upgrade-Insecure-Requests": "1",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0",
+    }
+
+    def _real_extract(self, url):
+        video_id = self._match_id(url)
+        cookies = ';'.join([
+            c.strip()
+            for c in str(self._get_cookies(url)).split('Set-Cookie: ')
+            if len(c) > 0
+        ])
+        webpage = self._download_webpage(
+            url, video_id, headers={
+                'Cookie': cookies,
+                **self._HEADERS
+            }
+        )
+        self._video_id = self._search_regex(
+            r'scws_id&quot;:(\d+)',
+            webpage,
+            'video_id',
+            default=None
+        )
+
+        super()._real_extract(url)

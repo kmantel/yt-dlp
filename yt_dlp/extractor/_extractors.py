@@ -1808,7 +1808,7 @@ from .streamff import StreamFFIE
 from .streetvoice import StreetVoiceIE
 from .stretchinternet import StretchInternetIE
 from .stripchat import StripchatIE
-from .streamingcommunity import StreamingCommunityIE
+from .streamingcommunity import StreamingCommunityIE, StreamingCommunityListIE
 from .stv import STVPlayerIE
 from .substack import SubstackIE
 from .sunporno import SunPornoIE

@@ -1,7 +1,18 @@
+import base64
+import hashlib
 import json
 import re
+import time
+import warnings
+from typing import Type
 
 from .common import InfoExtractor
+
+_video_quality_preferences = {
+    '480p': 0,
+    '720p': 1,
+    '1080p': 2,
+}
 
 
 class StreamingCommunityIE(InfoExtractor):
@@ -46,8 +57,32 @@ class StreamingCommunityIE(InfoExtractor):
         # TODO more code goes here, for example ...
         # title = self._html_search_regex(r'<h1>(.+?)</h1>', webpage, 'title')
 
-        match = re.match(r'.*type=(\w+)&rendition=(.*?)&.*', url)
-        typ, rendition = match[1], match[2]
+        try:
+            match = re.match(r'.*type=(\w+)&rendition=(.*?)&.*', url)
+            typ, rendition = match[1], match[2]
+        except TypeError:
+            best_quality = -1
+            typ = 'video'
+            # extract type and rendition from playlist
+            master_playlist = webpage
+            for f in master_playlist.split('\n'):
+                if len(f) == 0 or f[0] == '#':
+                    if 'TYPE=SUBTITLE' in f:
+                        print('Found subtitle track:', f)
+                    elif 'RESOLUTION=' in f:
+                        try:
+                            res = re.match(r'.*RESOLUTION=\d+x(\d+)', f)[1]
+                        except IndexError:
+                            print('No matching resolution for', f)
+                        else:
+                            if int(res) > best_quality:
+                                rendition = f'{res}p'
+                                best_quality = int(res)
+            url = url.split('?')
+            assert len(url) == 2
+            url = url[0] + f'?type={typ}&rendition={rendition}&' + url[1]
+            webpage = self._download_webpage(url, video_id)
+
         cdn = data['cdn']
         fragments = []
         next_cdn_proxy_index = data['proxy_index']
@@ -108,8 +143,8 @@ class StreamingCommunityListIE(StreamingCommunityIE):
         # "Cookie": "cf_clearance=wAeukLs0I6YCuM7t3np18NG9zhOCcU99ipj0a7wUiR8-1676807849-0-250; XSRF-TOKEN=eyJpdiI6IkRUbGVHRzZlTkZYbVpRNVFQcW4rY1E9PSIsInZhbHVlIjoiYWxSY2dPK3p2aFNBYW8xRWg5SWltV3kzdUlINkNpVzBYcFExZGp4RFpZU0VNblU3am5NYUNyTnVQcGlLOWgySGJSYldNalRsWXFqRkRKK2RBdXBoMkJBMWo1dUt1bkhpajNnY1lrQ0VzeThDRk05dTdHeEdXWmxOeWJObk15cnUiLCJtYWMiOiI1NDA3ZDhiMzlhMjJiOGUzNThlOWI2OTlmYjNiM2Q4MTE1NjM1ODVhYjcyNjdlNjI3Mzg1N2QyMGYzZDM1ZDQ2In0%3D; streamingcommunity_session=eyJpdiI6IlBLMVpNTW40dCtZRW1MVkptbzczMUE9PSIsInZhbHVlIjoiaWxHUExUeFhRaW96NE9yMmMya21iVFNXVmZXMDJMS0dWUjlLdDJJQ3JzTHlsMXVcL2FtTFN6ZmhFUWdKWTR0QXhxVVVWbE0zbVB0d0dveFRDNW53cnVPYlpYcVNRemdKZ05cL00wSkV1K3FvQkNoN3VXMGdDQkZjOEJvVEw0bW54MSIsIm1hYyI6IjA3ZGQ0ZTk0OWJjOTk1OTdiYzE0N2YzZDUwZTE2Y2NhOWRkM2JhYzU4M2ViYTk3NzliNGM1MzY5ZTYzNGYyMWEifQ%3D%3D; cf_chl_2=c2bf5c24b0c95aa; cf_chl_rc_m=3",
         "Connection": "keep-alive",
         "DNT": "1",
-        "Host": "streamingcommunity.blue",
-        "Referer": "https://streamingcommunity.blue/",
+        # "Host": "streamingcommunity.blue",
+        # "Referer": "https://streamingcommunity.blue/",
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",
         "Sec-Fetch-Site": "same-origin",
@@ -122,16 +157,43 @@ class StreamingCommunityListIE(StreamingCommunityIE):
 
     def _real_extract(self, url):
         video_id = self._match_id(url)
-        cookies = ';'.join([
-            c.strip()
-            for c in str(self._get_cookies(url)).split('Set-Cookie: ')
-            if len(c) > 0
-        ])
+        cookie_cf_clearance = None
+        cookie_session = None
+        cookie_xsrf = None
+        print(str(self._get_cookies(url)).split('Set-Cookie: '))
+
+        for c in str(self._get_cookies(url)).split('Set-Cookie: '):
+            c = c.strip()
+
+            if 'cf_clearance' in c:
+                cookie_cf_clearance = c
+            elif '_session' in c:
+                cookie_session = c
+            elif 'XSRF' in c:
+                cookie_xsrf = c
+
+        if cookie_cf_clearance is None or cookie_session is None or cookie_xsrf is None:
+            warnings.warn('Not all cookies present, this may not work (403 Forbidden) if browser cookies are not used to pass captcha')
+
+        cookies = []
+        for n, c in [('cf_clearance', cookie_cf_clearance), ('session', cookie_session), ('xsrf', cookie_xsrf)]:
+            if c is None:
+                warnings.warn(f'Cookie {n} is missing, this may not work')
+            else:
+                cookies.append(c)
+
+        orig_host = re.match(r'https?://(.*\.(blue|bike)).*', url)[1]
+
+        headers = {
+            'Host': orig_host,
+            'Referer': orig_host,
+            **self._HEADERS
+        }
+        if len(cookies) > 0:
+            headers['Cookie'] = '; '.join(cookies)
+
         webpage = self._download_webpage(
-            url, video_id, headers={
-                'Cookie': cookies,
-                **self._HEADERS
-            }
+            url, video_id, headers=headers
         )
         self._video_id = self._search_regex(
             r'scws_id&quot;:(\d+)',
@@ -140,4 +202,21 @@ class StreamingCommunityListIE(StreamingCommunityIE):
             default=None
         )
 
-        super()._real_extract(url)
+        # get token from obfuscated js
+        # ----------------------------
+        my_ip = self._download_webpage('https://api.ipify.org', '')
+
+        # constants
+        r = 48
+        a = 'Yc8U6r8KjAKAepEA'
+        expiry_const = 3600  # actually 3600 * 1000 in original
+        expiry_time = round(time.time() + expiry_const * r)
+
+        token = f'{expiry_time}{my_ip} {a}'
+        token = hashlib.md5(token.encode('utf-8')).digest()
+        token = base64.encodebytes(token).strip()
+        token = token.decode('utf-8').replace('=', '').replace('+', '-').replace('/', '_')
+
+        work_url = f'https://scws.work/master/{self._video_id}?token={token}&expires={expiry_time}'
+
+        super()._real_extract(work_url)
